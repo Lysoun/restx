@@ -67,8 +67,7 @@ public class MoreClassesTest {
 				Iterable.class,
 				Serializable.class,
 				RandomAccess.class,
-				Cloneable.class,
-				SequencedCollection.class
+				Cloneable.class
 		);
 
 		assertThat(getInheritedClasses(FileOutputStream.class)).containsOnly(
