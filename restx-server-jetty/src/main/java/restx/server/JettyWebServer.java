@@ -5,10 +5,10 @@ import org.eclipse.jetty.ee10.webapp.WebAppContext;
 import org.eclipse.jetty.security.DefaultIdentityService;
 import org.eclipse.jetty.security.HashLoginService;
 import org.eclipse.jetty.security.UserStore;
-import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
+import org.eclipse.jetty.util.VirtualThreads;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
 import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -23,19 +23,25 @@ public class JettyWebServer extends WebServerBase {
     private static final Logger logger = LoggerFactory.getLogger(JettyWebServer.class);
 
     private Server server;
-    private String webInfLocation;
+    private final String webInfLocation;
+    private final boolean virtualThread;
 
     public JettyWebServer(String appBase, int aPort) {
-        this(null, appBase, aPort, null);
+        this(null, appBase, aPort, null, false);
     }
 
-    public JettyWebServer(String webInfLocation, String appBase, int port, String bindInterface) {
+    public JettyWebServer(String appBase, int aPort, boolean virtualThread) {
+        this(null, appBase, aPort, null, virtualThread);
+    }
+
+    public JettyWebServer(String webInfLocation, String appBase, int port, String bindInterface, boolean virtualThread) {
         super(checkNotNull(appBase), port, bindInterface, "Jetty", "org.eclipse.jetty", "jetty-server");
 
         if (webInfLocation != null) {
             checkFileExists(webInfLocation);
         }
         this.webInfLocation = webInfLocation;
+        this.virtualThread = virtualThread;
     }
 
     @Override
@@ -60,8 +66,12 @@ public class JettyWebServer extends WebServerBase {
 
     protected ThreadPool createThreadPool() {
         QueuedThreadPool threadPool = new QueuedThreadPool();
-        threadPool.setMinThreads(1);
-        threadPool.setMaxThreads(Math.max(10, Runtime.getRuntime().availableProcessors()));
+        if (virtualThread) {
+            threadPool.setVirtualThreadsExecutor(VirtualThreads.getDefaultVirtualThreadsExecutor());
+        } else {
+            threadPool.setMinThreads(1);
+            threadPool.setMaxThreads(Math.max(10, Runtime.getRuntime().availableProcessors()));
+        }
         return threadPool;
     }
 
@@ -106,7 +116,11 @@ public class JettyWebServer extends WebServerBase {
     }
 
     public static WebServerSupplier jettyWebServerSupplier(final String webInfLocation, final String appBase) {
-        return port -> new JettyWebServer(webInfLocation, appBase, port, "0.0.0.0");
+        return jettyWebServerSupplier(webInfLocation, appBase, true);
+    }
+
+    public static WebServerSupplier jettyWebServerSupplier(final String webInfLocation, final String appBase, final boolean virtualThread) {
+        return port -> new JettyWebServer(webInfLocation, appBase, port, "0.0.0.0", virtualThread);
     }
 
     public static void main(String[] args) throws Exception {
@@ -117,6 +131,6 @@ public class JettyWebServer extends WebServerBase {
 
         String appBase = args[0];
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 8086;
-        new JettyWebServer(appBase + "WEB-INF/web.xml", appBase, port, "0.0.0.0").startAndAwait();
+        new JettyWebServer(appBase + "WEB-INF/web.xml", appBase, port, "0.0.0.0", false).startAndAwait();
     }
 }

@@ -4,9 +4,11 @@ import com.google.common.base.Throwables;
 import jakarta.servlet.ServletException;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
+import org.apache.catalina.connector.Connector;
 import org.apache.catalina.core.AprLifecycleListener;
 import org.apache.catalina.core.StandardServer;
 import org.apache.catalina.startup.Tomcat;
+import org.apache.tomcat.util.threads.VirtualThreadExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,18 +23,27 @@ public class TomcatWebServer extends WebServerBase {
     private final Tomcat tomcat;
     private final Context context;
 
-    public TomcatWebServer(String appBase, int port, String bindInterface) throws ServletException {
+    public TomcatWebServer(String appBase, int port, String bindInterface, boolean virtualThread) throws ServletException {
         super(checkNotNull(appBase), port, bindInterface, "Apache Tomcat", "org.apache.tomcat", "tomcat-catalina");
 
         tomcat = new Tomcat();
 
-        tomcat.setPort(port);
         tomcat.setBaseDir(".");
         tomcat.getHost().setAppBase(".");
 
-        // Create default connector with port
-        // Do not remove as Tomcat open the port only if getConnector is called at least once
-        tomcat.getConnector();
+        if (virtualThread) {
+            // Set a custom connector with VirtualThreadExecutor
+            Connector connector = new Connector();
+            connector.setPort(port);
+            connector.getProtocolHandler().setExecutor(new VirtualThreadExecutor("http"));
+            tomcat.setConnector(connector);
+        } else {
+            tomcat.setPort(port);
+
+            // Create default connector with port
+            // Do not remove as Tomcat open the port only if getConnector is called at least once
+            tomcat.getConnector();
+        }
 
         String contextPath = "";
 
@@ -62,16 +73,12 @@ public class TomcatWebServer extends WebServerBase {
     }
 
     public static WebServerSupplier tomcatWebServerSupplier(final String appBase, final String bindInterface) {
-        return new WebServerSupplier() {
-            @Override
-            public WebServer newWebServer(int port) {
-                try {
-                    return new TomcatWebServer(appBase, port, bindInterface);
-                } catch (ServletException e) {
-                    throw Throwables.propagate(e);
-                }
+        return port -> {
+            try {
+                return new TomcatWebServer(appBase, port, bindInterface, false);
+            } catch (ServletException e) {
+                throw Throwables.propagate(e);
             }
         };
     }
-
 }
