@@ -76,8 +76,12 @@ public class SecurityModule {
     }
 
     @Provides @Named(ENTRY_CACHE_MANAGER)
-    public EntryCacheManager guavaCacheManager() {
-        return new GuavaEntryCacheManager();
+    public EntryCacheManager cacheManager(final RestxConfig config) {
+        if (config.getBoolean("restx.session.cache.virtual").or(false)) {
+            return new VirtualGuavaEntryCacheManager();
+        } else {
+            return new GuavaEntryCacheManager();
+        }
     }
 
     @Provides(priority = 100000)
